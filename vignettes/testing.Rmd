@@ -1,0 +1,333 @@
+---
+title: "Technical reference: testing"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Technical reference: testing}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\usepackage[utf8]{inputenc}
+---
+
+
+
+
+## Summary
+
+Counts below are from a fresh full run on the installed package: all files **green, 0 failures**. "Tests" = `test_that()` blocks; "Assertions" = passing `expect_*` checks.
+
+| File | Tests | Assertions | Scope |
+|------|-------|------------|-------|
+| `test-cleangrowth.R` | 11 | 55 | `cleangrowth()` API: adult integration, child/adult spanning subjects |
+| `test-data-frame-api.R` | 13 | 38 | Data-frame entry point: canonical/remapped columns, vector↔data-frame equivalence, id auto-gen, input errors |
+| `test-child-regression.R` | 8 | 47 (+1 skip) | Frozen counts, spot checks, cross-sample stability, Missing, HC, preload_refs (partial-run test skipped — feature deprecated) |
+| `test-child-algorithms.R` | 27 | 66 | CF rescue (deltaz/nextz rule: decline→rescue, jump→exclude, whole-string, end-of-series age rule; cf_detail, CF-E), unit-error smoke tests (Section 2 — "excluded somehow", not Evil-Twins-specific), Error Load, HC boundary, parallel, GA correction, Birth EWMA2, LENGTHCM |
+| `test-child-support-fns.R` | 7 | 32 | Support-fn units (T20/T21/T22/T24/T13/T14): `get_dop`, `.child_valid` include-flag matrix, `.child_z3` boundary/order, `sd_median` lookup/extrapolation, `ewma()` cache_env, `ewma_cache_update()` neighbor rebuild |
+| `test-child-piv.R` | 7 | 9 | Child Step 7 PIV (T18/T19): standardized-PIV low cutoffs + 1-year split on HT (`piv.z.ht.low.young`/`.old`; WT has no low cutoffs), absolute birth backstops (WT>10.5, HT>65, HC>50 at age 0; WT>35 <2y) with same-magnitude non-birth controls |
+| `test-child-sde-tiebreak.R` | 1 | 6 | Same-day-identical tiebreak (T2): birth keeps lowest id, non-birth keeps highest id; loser is `Exclude-Identical` |
+| `test-child-parameters.R` | 5 | 12 | Parameter acceptance + behavior (cf_rescue, ewma_window, error load, imperial, LENGTHCM) |
+| `test-child-edge-cases.R` | 14 | 28 | Sparse/degenerate data, all-NA, same-day, negative agedays, HC>5y, single-value PIV (WT/HT/HC), determinism |
+| `test-child-fix1.R` | 2 | 8 | Fix 1 preterm catch-up gate: full code lock on the corrected/uncorrected fixture + key-case spot checks |
+| `test-child-stress.R` | 3 | 28 | 400-subject errored multi-archetype dataset: structural invariants, frozen category counts, all-archetype crash-free |
+| `test-child-et.R` | 3 | 9 | Child Evil Twins fixture: membership, per-pattern invariants, HC interior-step cleaned (not out-of-range) |
+| `test-child-birth-ewma2.R` | 3 | 11 | Birth HT/HC EWMA2 (Steps 15/16): 3-value SP with birth, isolated low birth-WT keep/exclude band |
+| `test-child-corroboration.R` | 3 | 13 | GA-correction corroboration gate (incl. HT/HC confirm-correction + 3.5 cap); UER3 unit-error 2-group drop |
+| `test-child-unit-error-range.R` | 6 | 17 | `unit_error_range` output column + `.unit_error_range_flag`/`.compute_unit_error_range` band math |
+| `test-exclusion-code-crosswalk.R` | 5 | 11 | Detailed→Summary crosswalk: no-NA, every Detailed mapped, Summary = canonical fold, valid factor levels, shared/child/adult folds exercised |
+| `test-adult-clean.R` | 59 | 199 | All 14 adult steps, 4 permissiveness levels, edge cases (via `cleanadult()` directly) |
+| `test-adult-et.R` | 7 | 20 | Adult Evil Twins anchor rule (4-eligible-weight requirement, end/interior cede-to-EWMA), sex=NA CSD fallback |
+| `test-checkpoint.R` | 3 | 6 | `cleangrowth_checkpoint()`: fresh-run reset, `use_existing_checkpoint_results` reuse, chunk-cap error |
+| `test-recenter-source.R` | 13 | 31 | `recenter_source` wiring (`reference`/`none`/supplied-table precedence) for `cleangrowth()` + `cleangrowth_checkpoint()`; `recenter_detail` output contract (columns, `debug`/`full_detail` parity, dedup, checkpoint forwarding); syngrowth-scale reference-path byte-identity guard |
+| `test-utils.R` | 11 | 460 | `splitinput`, `recode_sex`, `longwide`, `simple_bmi` (utilities, not the cleaning algorithm) |
+| `test-cdc.R` | 1 | 5 | `ext_bmiz()` vs the CDC SAS reference implementation |
+| **Total** | **212** (1 skipped) | **1111 run** | 1 test skipped (partial-run, deprecated). |
+
+**Adult regression harness (separate from testthat):** `tests/test_harness.R` runs `cleanadult()` against `inst/testdata/adult-gc-test-ALL-PHASES.csv` (1508 rows) at each permissiveness level — **1508/1508 at all 4 levels** (loosest/looser/tighter/tightest).
+
+All 22 testthat files run standalone under `Rscript` (each carries `library(growthcleanr)` + `skip_on_cran()` at the top).
+
+---
+
+## Running Tests
+
+```bash
+# Single file
+NOT_CRAN=true Rscript -e 'testthat::test_file("tests/testthat/test-child-algorithms.R")'
+
+# All files
+NOT_CRAN=true Rscript -e 'testthat::test_dir("tests/testthat/")'
+
+# Adult regression harness (separate from testthat)
+Rscript tests/test_harness.R [loosest|looser|tighter|tightest]
+```
+
+**IMPORTANT:** Tests use `library(growthcleanr)`, which loads the *installed* package. After any code changes, reinstall before testing — otherwise tests run against stale code:
+```r
+devtools::install_local(".", force = TRUE, upgrade = "never")
+```
+
+---
+
+## test-cleangrowth.R
+
+The `cleangrowth()` entry point — dispatches to child and adult algorithms and assembles combined output.
+
+| Test | What it verifies |
+|------|------------------|
+| works as expected on adult synthetic data | Spot-check records, cutpoint comparison, frozen counts, Missing handling |
+| works without either adult or pediatric data | Adult-only, pediatric-only, empty data all return correct row counts |
+| spanning subject: all rows preserved through child/adult split | Real syngrowth subject (child + adult rows): no rows lost, no NA codes |
+| spanning subject: child rows get child codes, adult rows get adult codes | Code prefixes on the **Detailed** level (`exclude_detail = TRUE`): `Exclude-C-*` for child, `Exclude-A-*` for adult (the default Summary `exclude` consolidates the two, so prefixes show only at Detailed) |
+| spanning subject: constructed subject processed correctly across boundary | Synthetic 18y–22y subject: all rows returned, correct prefixes, normal values mostly included |
+| adult integration: output columns present and correctly typed | `mean_ht` (numeric, populated), `bin_result`/`bin_exclude` present; `exclude` factor, no NAs |
+| adult integration: imperial units processed correctly | HEIGHTIN/WEIGHTLBS through the full pipeline; param preserved as imperial; `mean_ht` in cm |
+| adult integration: adult_permissiveness passes through | 115 cm HT → PIV at `looser`, passes PIV at `loosest` |
+| adult integration: adult_scale_max_lbs passes through | 136 kg flagged with cap = 300 lbs, included without a cap |
+| adult integration: character/UUID ids preserved | String ids survive the round trip intact |
+| adult integration: spanning subject has correct output structure | Child rows have NA `mean_ht`; adult rows populated; `bin_exclude` non-NA for all |
+
+---
+
+## test-data-frame-api.R
+
+The data-frame style entry point (the primary calling style) and the `id` auto-generation/validation behavior.
+
+| Test | What it verifies |
+|------|------------------|
+| cleangrowth(data = df) works with canonical column names | data.table input with default names |
+| cleangrowth(data = df) works with a plain data.frame | data.frame input coerced internally |
+| cleangrowth() accepts remapped column names as strings | `subjid = "patid"`, `id = "row_id"`, etc. |
+| data-frame and vector styles produce identical results | The two calling styles agree row-for-row |
+| missing id column triggers warning + auto-generates | No `id` → warning, sequential 1:N |
+| missing required columns error clearly | Absent required column → informative error |
+| non-data.frame `data` argument errors clearly | Wrong `data` type → error |
+| column-name args reject vectors and non-strings | Column-name args must be single strings |
+| vector style without id warns and auto-generates | Legacy vector path, no id → warning + auto-gen |
+| calling with neither `data` nor vectors errors clearly | Empty call → error |
+| duplicate id values warn and auto-regenerate, preserving user input | Non-unique id → warning, regen, original preserved in `id`, internal id in `gc_id` |
+| NA id values warn and auto-regenerate, preserving user input | NA id → same handling |
+| valid id with display_gc_id sets gc_id == id (no warning) | Valid id → no regen, `gc_id == id` |
+
+---
+
+## test-child-regression.R
+
+Frozen-count and stability tests on syngrowth data. These break on intentional behavior changes — update expected values (and document the re-baseline) when that happens.
+
+| Test | What it verifies |
+|------|------------------|
+| structural invariants on 100-subject subset | Row counts, column presence, factor type, no NAs, ≥1 Include |
+| exclusion counts match expected on 100 subjects | Frozen counts by exclusion code (regression baseline) |
+| spot-check individual records | Specific record ids produce specific exclusion codes |
+| within-subject exclusions stable at 50 vs 100 subjects | Same subject, same code regardless of batch context |
+| missing measurements return Missing | NA measurements → `Exclude-Missing-Info` |
+| HEADCM measurements are processed | HC rows present with valid codes |
+| gc_preload_refs: identical results to standard run | `ref_tables` produces byte-identical output |
+| changed_subjids: partial run produces identical results | **SKIPPED** — partial runs deprecated/disabled (`skip()`) |
+
+---
+
+## test-child-algorithms.R
+
+Constructed-scenario tests organized by algorithm step.
+
+- **CF rescue (Step 6):** standard rescues more than none; `cf_status` populated for rescued; none mode rescues none; all mode rescues all; `cf_detail` adds `cf_status`/`cf_deltaz`/`cf_nextz`; CF-E rows (CF sharing an Include day) labeled and `cf_nextz` skips temp SDEs; cf_detail columns absent by default.
+- **CF rescue rule (Step 6, deltaz/nextz):** a carried value followed by a continued decline is rescued (CF-R); one followed by a jump up (true CF) is excluded (CF-NR); all CFs in one identical-value string share a single status (whole-string decision on the last CF); an end-of-series CF (no `cf_nextz`) falls back to the age rule.
+- **Evil Twins / OTL (Step 9):** single/two/three consecutive unit errors (×2.54) excluded as `Exclude-C-Evil-Twins`; collateral damage on clean neighbors bounded.
+- **Error Load (Step 21):** threshold and mincount parameters control behavior; a many-error subject triggers Unevaluable-Trajectory on remaining Includes.
+- **Age boundary:** HEADCM cleaned ≤5y, `Exclude-HC-Out-of-Range` >5y.
+- **Parallel execution:** `parallel = TRUE` matches `parallel = FALSE`.
+- **GA correction (Step 2b):** very low birth weight gets correction (`ctbc.sd ≠ tbc.sd`); birth z ≥ −2 does not.
+- **Birth EWMA2 (Steps 15/16):** extreme birth weight excluded; normal included; extreme birth height excluded.
+- **LENGTHCM:** results identical to HEIGHTCM for the same measurements.
+
+---
+
+## test-child-parameters.R
+
+Each configurable parameter is accepted and behaves as documented.
+
+| Test | What it verifies |
+|------|------------------|
+| cf_rescue='all' keeps CFs, cf_rescue='standard' excludes them | CF rescue mode behavior |
+| ewma_window parameter is accepted and doesn't crash | Window parameter acceptance |
+| error load parameters affect error-load exclusions | `error.load.*` plumbing |
+| imperial units (HEIGHTIN, WEIGHTLBS) are converted and processed | Imperial conversion |
+| LENGTHCM param is accepted and processed | LENGTHCM acceptance |
+
+---
+
+## test-child-edge-cases.R
+
+Minimal, degenerate, and boundary-condition data.
+
+| Test | What it verifies |
+|------|------------------|
+| single subject | Runs on 1 subject |
+| single measurement per param | 1 HT + 1 WT → valid output |
+| exactly 2 measurements per param | 2 per param → valid output |
+| all-NA measurements | All NA → all `Exclude-Missing-Info` |
+| mix of NA and valid | NAs get Missing-Info, valid values get real codes |
+| same-day identical measurements | Detected and marked |
+| negative agedays | → `Exclude-Missing-Info` |
+| HEADCM > 5 years; HEADCM ≤ 5 years | >5y `Exclude-HC-Out-of-Range`; ≤5y cleaned |
+| single extreme WT / HT / HC | Each excluded as population-implausible (`Exclude-C-Hard-Limit` Detailed) |
+| mix of data-rich and data-sparse subjects | Both handled |
+| carried-forward values | Detected |
+| deterministic results | Same input → same output (seed-independent) |
+
+---
+
+## test-child-fix1.R
+
+Fix 1 preterm catch-up gate (Child Steps 11/15/16) on the 202-subject corrected/uncorrected fixture.
+
+| Test | What it verifies |
+|------|------------------|
+| exclusion codes match expected (gated −1.5) | Full code lock on the fixture; corr-gating invariant (uncorrected == baseline) |
+| key cases behave as designed | Low catch-up rescued; real-preterm kept; correction-inflated value excluded |
+
+---
+
+## test-child-stress.R
+
+A 400-subject errored multi-archetype dataset (`stress_test_data.rds`). Frozen aggregate counts at the **Detailed** code level.
+
+| Test | What it verifies |
+|------|------------------|
+| structural invariants on 400-subject errored dataset | Row counts, columns, factor type, no NAs |
+| exclusion category counts match expected | Frozen counts by category (`exclude_detail = TRUE`, category renames applied) |
+| all archetypes processed without crash | Every archetype runs to completion |
+
+---
+
+## test-child-et.R
+
+Child Evil Twins on a deterministic fixture (the real ET membership coverage — `test-child-algorithms.R` Tests 5–7 only assert "excluded somehow").
+
+| Test | What it verifies |
+|------|------------------|
+| Evil-Twins membership matches expected | Per-row `Exclude-C-Evil-Twins` membership (Detailed) |
+| per-pattern invariants | Pattern-level invariants on the fixture |
+| HC interior step is cleaned, not out-of-range | HC interior step within range is cleaned, not `Exclude-HC-Out-of-Range` |
+
+---
+
+## test-child-birth-ewma2.R
+
+Birth HT/HC EWMA2 changes (Steps 15/16).
+
+| Test | What it verifies |
+|------|------------------|
+| Change 4: extreme non-birth value in a 3-value HT/HC SP with a birth is caught | Birth now participates in Step 15 for exactly-3-value SPs |
+| Change 4: a plausible 3-value HT/HC SP with a birth is left fully Include | No over-exclusion on the plausible companion |
+| Change 2: isolated low uncorrected birth WT kept / excluded by band | Kept when `|z|+rise ≤ 7`, excluded when `> 7` |
+
+---
+
+## test-child-corroboration.R
+
+| Test | What it verifies |
+|------|------------------|
+| GA correction is gated on corroboration of prematurity | Correction applied only with a corroborating early weight or same-day low height/HC |
+| HT/HC confirm-correction: HC corroborates only as last resort, capped at 3.5 z | HC may confirm a correction (when low and within 3.5 z of the weight) only with no early-weight and no confirming-HT corroboration; a confirming HT overrides a bad HC; the 3.5 cap blocks an otherwise-low HC over a far-lower weight |
+| UER3: a clean unit-error 2-group SP drops the unit-error block | UER3 2-group selection drops the unit-error values |
+
+---
+
+## test-child-unit-error-range.R
+
+The default-ON informational `unit_error_range` output column and its internal helpers.
+
+| Test | What it verifies |
+|------|------------------|
+| column is present and logical by default | `unit_error_range` present, logical |
+| `unit_error_range = FALSE` omits the column | Opt-out path |
+| excluded-from-cleaning rows are FALSE | `Exclude-Missing-Info` / `Exclude-HC-Out-of-Range` rows never flagged |
+| `.unit_error_range_flag` flags WEIGHTKG unit-error magnitudes | WT band math |
+| `.unit_error_range_flag` flags HEIGHTCM unit-error magnitudes | HT band math |
+| `.compute_unit_error_range` returns FALSE for excluded/NA-age rows | Excluded / NA-age handling |
+
+---
+
+## test-exclusion-code-crosswalk.R
+
+Locks the Detailed→Summary crosswalk directly (guards the silent-NA-factor class: a new internal code with no crosswalk entry fails here). Runs a syngrowth subset + constructed rows guaranteeing shared/child/adult folds.
+
+| Test | What it verifies |
+|------|------------------|
+| every output row has non-NA Detailed and Summary codes | No silent NA factor levels |
+| every observed Detailed code is in the canonical crosswalk | Detailed codes all mapped |
+| Summary equals the canonical fold of the Detailed code, every row | Each Summary == its canonical fold |
+| every observed Summary code is a valid Summary factor level | Summary ∈ the 14 levels |
+| crosswalk coverage: shared, child, and adult folds are all exercised | All three fold families hit |
+
+---
+
+## test-adult-clean.R
+
+59 unit tests calling `cleanadult()` directly (via `growthcleanr:::`), organized by step. **199 assertions.** Covers PIV (1H/1W incl. BMI-PIV), minimal/edge cases, Weight Cap (4W), same-day (9H/10W), Evil Twins (9Wa anchor rule), Extreme EWMA (9Wb), Height Distinct (10H 2D band + 3+D window + `ht_band`), Moderate EWMA (11Wb), 1D (13, incl. BMI limits + custom limits), Error Load (14), parameter validation, output structure, repeated values (2W), 2D ordered/non-ordered weight (11Wa/11Wa2), cap influence, the full 1220-row regression, imperial units, mean height, multi-subject isolation, the permissiveness framework (4 levels + overrides + `allow_ht_gain`/`mod_ewma_f`/`allofus15` effects), and `permissiveness_presets()` completeness.
+
+---
+
+## test-adult-et.R
+
+Adult Evil Twins anchor rule (Adult Step 9Wa), the adult-side companion to `test-child-et.R`.
+
+| Test | What it verifies |
+|------|------------------|
+| flanked over-the-limit weight pair triggers Evil Twins | Anchored pair fires |
+| single interior weight spike is ceded to EWMA | Lone interior spike not ET |
+| single end weight spike is ceded (no anchor before it) | End spike not ET |
+| does not fire with fewer than 4 eligible weights | `n ≥ 4` requirement |
+| can fire with exactly 4 eligible weights | Boundary of the requirement |
+| fires for sex = NA adults (averaged CSD fallback) | sex=NA path uses M/F-averaged CSD |
+| adult CSD reference includes an M/F-averaged sex = NA row | Reference table has the averaged row |
+
+---
+
+## test-checkpoint.R
+
+`cleangrowth_checkpoint()` chunked-run wrapper.
+
+| Test | What it verifies |
+|------|------------------|
+| default run starts fresh: stale checkpoints removed, result correct | `use_existing_checkpoint_results = FALSE` clears prior files; result matches a plain run |
+| use_existing_checkpoint_results = TRUE reuses prior checkpoints | Completed chunks skipped on resume |
+| explicit chunk_size that exceeds the 1000-chunk cap errors | Explicit oversized `chunk_size` → error (default would auto-increase) |
+
+---
+
+## test-utils.R
+
+Post-cleaning utilities (outside the algorithm). **460 assertions** (loop-heavy).
+
+| Test group | What it verifies |
+|------|------------------|
+| splitinput (defaults / custom / errors) | Subject-preserving CSV chunking; `min_nrow`/`keepcol`; invalid `fdir` error |
+| recode_sex (defaults / custom) | 0/1 → 1/2 recode and custom mappings |
+| longwide (defaults / extra cols / keep-unmatched / other codes / errors) | Long→wide reshape, `extra_cols` match logic, `keep_unmatched_data`, `inclusion_types`, duplicate-id error |
+| simple_bmi | `wt / (ht·0.01)²` |
+
+---
+
+## test-cdc.R
+
+| Test | What it verifies |
+|------|------------------|
+| ext_bmiz produces comparable output to CDC SAS implementation | Extended BMIz / LMS metrics vs the CDC reference |
+
+---
+
+## Coverage Gaps
+
+Summary of the standing gaps:
+
+### Known gaps (see the testing-gaps doc for constructed-test designs)
+
+- **CF rescue rule (deltaz/nextz):** covered by constructed directional tests (decline→rescue, jump→exclude, whole-string, end-of-series age rule) plus regression counts; the boundary values (sum = 1, `cf_deltaz` = 1.5/0.5/1, the 13y age split) are not each pinned by a dedicated test.
+- **Child Step 17 HC velocity:** no test asserts an HC `Exclude-C-Abs-Diff`; the whole HC velocity path is covered only via frozen counts.
+- **Child Steps 15/16 middle/first/last EWMA2 variants:** only the birth-WT and 3-value-SP paths are constructed; middle/first/last value rules are covered indirectly via regression counts.
+- **Child Step 19 (pairs/singles):** frozen count only (currently 0 in the regression subset); pair-split and single-branch boundaries untested.
+- **Child Step 13 EWMA-based SDE resolution / robust SP-median drop:** only whole-day identicals are constructed.
+- **Support functions** (`get_dop`, `.child_valid`, `.child_z3`, `sd_median`): not unit-tested in isolation (some partly covered — `.unit_error_range_flag`/`.compute_unit_error_range` have direct tests).
+- **Adult:** error load with the −5 exponent, and very-low/high UW scaling edge cases, are not covered.

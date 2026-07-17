@@ -1,0 +1,51 @@
+Package: growthcleanr
+Type: Package
+Title: Data Cleaner for Anthropometric Measurements
+Version: 2.99.0
+Authors@R: c(
+    person("Carrie", "Daymont", email = "cdaymont@pennstatehealth.psu.edu", role = c("cre", "aut")),
+    person("Robert", "Grundmeier", role = "aut"),
+    person("Jeffrey", "Miller", role = "aut"),
+    person("Diego", "Campos", role = "aut"),
+    person("Dan", "Chudnov", role = "aut"),
+    person("Hannah", "De los Santos", role = "aut"),
+    person("Lusha", "Cao", role = "ctb"),
+    person("Steffani", "Silva", role = "ctb"),
+    person("Hanzhe", "Zhang", role = "ctb"),
+    person("Matt", "Boyas", role = "ctb"),
+    person("David", "Freedman", role = "ctb"),
+    person("Andreas", "Achilleos", role = "ctb"),
+    person("Jessica", "Butts", role = "ctb"),
+    person("Sheila", "Nguyen", role = "ctb"),
+    person("Taraneh", "Soleymani", role = "ctb"),
+    person("Max", "Olivier", role = "ctb"),
+    person("Chris", "Penney", role = "ctb")
+  )
+Description: Flags implausible anthropometric (height, weight, and head circumference) measurements in irregularly spaced longitudinal datasets, such as those from electronic health records. Identifies other measurements that should often be excluded from analyses.
+URL: https://carriedaymont.github.io/gc-updates-beta/, https://github.com/carriedaymont/gc-updates-beta
+BugReports: https://github.com/carriedaymont/gc-updates-beta/issues
+Imports:
+    R.utils (>= 2.11.0),
+    data.table (>= 1.13.0),
+    foreach (>= 1.5.0),
+    doParallel (>= 1.0.15),
+    parallel,
+    stats,
+    utils
+Depends:
+    R (>= 2.10)
+License: MIT + file LICENSE
+Encoding: UTF-8
+LazyData: true
+Roxygen: list(markdown = TRUE)
+Suggests:
+    argparser (>= 0.6),
+    dplyr (>= 1.0.1),
+    knitr (>= 1.29),
+    labelled (>= 2.5.0),
+    magrittr (>= 1.5),
+    rmarkdown (>= 2.3),
+    testthat (>= 2.3.2),
+    tidyr (>= 1.1.0)
+VignetteBuilder: knitr
+RoxygenNote: 7.3.3

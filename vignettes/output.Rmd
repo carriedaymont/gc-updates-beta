@@ -1,0 +1,161 @@
+---
+title: "Output: the cleangrowth() return value"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Output: the cleangrowth() return value}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\usepackage[utf8]{inputenc}
+---
+
+
+
+Catalog of every column `cleangrowth()` can return, the option(s) that turn each column on, and the values each column can take. Exclusion-code text values (the contents of `exclude`, `bin_exclude`, `tri_exclude`, and the SDE labels of `cf_status`) are listed in their canonical reference and only summarized here.
+
+**Single source of truth for exclusion codes:** `vignette("exclusion-codes")`.
+
+**Code truth.** The authoritative output-column assembly is at the bottom of `cleangrowth()` in `R/child_clean.R`: bin/tri derivation, `cf_status` NA fill, `corr_val`/`corr_pt` construction, `unit_error_range` flag, `gc_id` snapshot + user-`id` restoration, the `keep_cols` trim, and the rename pass that restores the user's column names. The `id` contract itself is implemented at entry (`user_id_orig` snapshot + `id_was_regened` flag) and consumed at the trim above.
+
+**Column-name preservation.** The six data columns (`id`, `subjid`, `param`, `agedays`, `sex`, `measurement`) are renamed in the output to match whatever name the user supplied (via the data-frame–style column-name arguments, or — for the vector style — derived from the call expression). The canonical names below are the defaults; user-supplied names are passed through unchanged.
+
+---
+
+## 1. Standard output (always returned)
+
+Eight columns; returned regardless of options.
+
+> **Output fidelity.** The data columns echoed from input — `id`, `subjid`, `param`, `agedays`, `sex`, `measurement` — carry the user's **verbatim submitted values**; gc never silently alters or drops an input value. Where gc must reinterpret a value to run the algorithm (imperial → metric, `LENGTHCM` → `HEIGHTCM`, `sex` → `0`/`1`/`NA`, `measurement` `0` → `NaN`), that reinterpretation is internal-only; the submitted value is what comes back. gc's interpreted `sex` is separately available as `gc_sex` (§7). A value gc cannot use (uninterpretable sex, `0`/negative measurement) is flagged `Exclude-Missing-Info` but still returned as submitted.
+
+| Column | Type | Values |
+|---|---|---|
+| `id` | as supplied (any) | The user's original row identifier, returned **exactly as supplied** — even when it was absent, `NULL`, contained `NA`s, or had duplicates. `id` is fully optional; when input is absent / `NULL` / `NA` / non-unique, gc issues a warning and auto-generates sequential integer ids `1:N` (in input row order) for internal use, but the output `id` column preserves whatever the caller supplied so results can still be mapped back to the input rows. A unique per-row id (not per-subject or per-encounter) is recommended for stable, traceable output. To see the id gc actually used internally, request `gc_id` (see §6). *Partial-run caveat (deprecated/disabled):* `cached_results`/`changed_subjids` partial runs are turned off (supplying them warns and falls back to a full clean), so this no longer arises. Historically, when `cached_results` was in use AND a regen occurred, output rows were in id-sort order rather than input row order, so the regen `1:N` stayed in `id`, and `display_gc_id = TRUE` exposed `gc_id` as the key. |
+| `subjid` | as supplied | Subject identifier, passed through unchanged. |
+| `param` | as supplied | The param **exactly as submitted** — `WEIGHTLBS` / `HEIGHTIN` / `LENGTHCM` are returned unchanged, not relabeled. gc converts imperial → metric and relabels `LENGTHCM` → `HEIGHTCM` *internally* for the algorithm, but the output preserves the user's submission (output fidelity). |
+| `agedays` | numeric | Age in days at measurement, passed through unchanged. |
+| `sex` | as supplied | Sex **exactly as submitted** — the verbatim value (`0`/`1`, `"m"`/`"M"`, `"f"`/`"F"`, or any uninterpretable code such as `"U"`/`9`). gc coerces this to an integer (`0` = male, `1` = female, else `NA`) *internally* for the algorithm; that interpreted value is surfaced as `gc_sex` (§7) under `debug`/`full_detail`. An uninterpretable sex routes the row to `Exclude-Missing-Info` but the submitted value is still returned here. |
+| `measurement` | as supplied | The measurement value **exactly as submitted** — including a submitted `0` (returned as `0`, not `NaN`) and original imperial units. gc's internal working value (imperial → metric; `0` → `NaN` for missingness) is used only inside the algorithm and is not surfaced. A `0` (or negative) measurement routes the row to `Exclude-Missing-Info` but the submitted value is still returned. |
+| `exclude` | factor | The **Summary** exclusion code (or `"Include"`). 14 consolidated codes spanning child + adult. Full catalog, levels, and the Detailed crosswalk: `vignette("exclusion-codes")`. The step-level **Detailed** code is available in `exclude_detailed` (§1b). |
+| `bin_exclude` | character | `"Include"` or `"Exclude"` — collapses every non-Include `exclude` code (including SDE codes and `Exclude-Missing-Info` / `Exclude-HC-Out-of-Range`) to `"Exclude"`. |
+
+---
+
+## 1b. `exclude_detailed` (when `exclude_detail = TRUE` or `full_detail = TRUE`)
+
+| Column | Type | Values |
+|---|---|---|
+| `exclude_detailed` | factor | The **Detailed** exclusion code (or `"Include"`). Step-level; keeps the child (`-C-`) / adult (`-A-`) algorithm prefix; folds away the repeated-value (RV / firstRV / allRV), `-All`, and round-iteration distinctions. Every Detailed code maps to exactly one Summary `exclude` code. Shared "for all" codes (`Exclude-Identical`, `Exclude-Extraneous`, `Exclude-Missing-Info`, `Exclude-HC-Out-of-Range`, `Exclude-Not-GC-Param`) carry no prefix at any level. Full catalog and Detailed→Summary crosswalk: `vignette("exclusion-codes")`. |
+
+---
+
+## 2. `unit_error_range` (on by default; set `unit_error_range = FALSE` to omit)
+
+Informational only — never affects `exclude` and is not in `exclude.levels`. **Not** included in `full_detail`; it has its own default-on switch.
+
+| Column | Type | Values |
+|---|---|---|
+| `unit_error_range` | logical | `TRUE` when the value's magnitude is consistent with a metric/imperial unit-conversion error AND the value is not within the plausible z = −3 to +3 band; `FALSE` otherwise. `FALSE` on `Exclude-Missing-Info` / `Exclude-HC-Out-of-Range` rows and any row without a z3 lookup. Child z3 cutoffs come from `inst/extdata/child_z3_reference.csv.gz`; adult cutoffs from the embedded NHANES CSD reference. |
+
+---
+
+## 3. `tri_exclude` (when `tri_exclude = TRUE` or `full_detail = TRUE`)
+
+| Column | Type | Values |
+|---|---|---|
+| `tri_exclude` | character | `"Include"`, `"Same-Day"`, or `"Exclude"`. `"Same-Day"` covers the same-day-extraneous codes — the shared `Exclude-Identical` / `Exclude-Extraneous` (which consolidate the former child `Exclude-C-Identical`/`Exclude-C-Extraneous` and adult `Exclude-A-Identical`/`Exclude-A-Extraneous`); everything else non-Include is `"Exclude"`. |
+
+---
+
+## 4. `cf_detail` (when `cf_detail = TRUE` or `full_detail = TRUE`)
+
+Six columns describing carried-forward (CF) detection and rescue (Child Step 6). Adult rows are labeled `"Adult"` (in `cf_status`) and `NA` in the other columns. The last three (`imperial`, `cf_dage_orig`, `cf_dage_next`) are design aids for CF-logic development.
+
+| Column | Type | Values |
+|---|---|---|
+| `cf_status` | character | `"Orig"` (originator of a CF string), `"CF-R"` (carried forward, rescued — Include), `"CF-NR"` (carried forward, not rescued — `Exclude-CF` in `exclude`, `Exclude-C-CF` in `exclude_detailed`), `"CF-E"` (CF on a day that also has an Include — same-day extraneous CF, never rescue-eligible), `"Not-CF"` (no CF relationship), or `"Adult"` (adult row; CF detection not applicable). |
+| `cf_deltaz` | numeric | Absolute uncorrected-z (`sd.orig_uncorr`) difference between the CF row and its originator — the value used for rescue evaluation. `NA` except on carried-forward rows; also `NA` on `CF-E` rows (they do not participate in string detection). |
+| `cf_nextz` | numeric | Signed change in `sd.orig_uncorr` from a CF row (`CF-R` or `CF-NR`) to the next non-CF value that is Included at the time of Child Step 6 (temporary same-day extraneous values do not count). `NA` for non-CF rows, `CF-E` rows, and when no eligible next value exists. |
+| `imperial` | logical | Row-level whole/half imperial-unit flag: `TRUE` when the value is a whole number of pounds (`WEIGHTKG`) or a whole/half inch (`HEIGHTCM`/`HEADCM`), within 0.01 of the imperial unit; computed from `v.orig`. `NA` on missing-measurement rows (`v.orig` is `NaN`) and adult rows. |
+| `cf_dage_orig` | integer | Day gap from a CF row's originator to the CF row (`agedays_CF − agedays_orig`; always positive) — the same interval used for the rescue evaluation. Populated for `CF-R`/`CF-NR` rows; `NA` elsewhere (incl. `CF-E` and non-CF rows). |
+| `cf_dage_next` | numeric | Day gap from a CF row (`CF-R`/`CF-NR`) to the next eligible non-CF Included value (`agedays_next − agedays_CF`; always positive) — the agedays analogue of `cf_nextz`. `NA` for non-CF rows, `CF-E` rows, and at the end of a subject/param series. |
+
+The current CF-rescue rule and the meaning of each of these columns is documented in full in `vignette("cf-rescue")`.
+
+---
+
+## 5. `corr_detail` (when `corr_detail = TRUE` or `full_detail = TRUE`)
+
+Two columns labeling gestational-age (GA) correction status (Child Step 2b). A value is "Corrected" iff its GA-corrected recentered z (`ctbc.sd`) differs from its uncorrected recentered z (`tbc.sd`).
+
+| Column | Type | Values |
+|---|---|---|
+| `corr_val` | character | Per-value label: `"Corrected"` (`ctbc.sd != tbc.sd`), `"Uncorrected"`, or `"Adult"` (adult row, i.e. `agedays >= adult_cutpoint * 365.25`). Child `Exclude-Missing-Info` rows are `"Uncorrected"`, not `"Adult"` (age, not z-score presence, drives the child/adult split). |
+| `corr_pt` | character | Per-subject label: `"Corrected"` (the subject has ≥1 child value with `corr_val == "Corrected"`), `"Uncorrected"`, or `"Adult"`. Constant within `subjid`. |
+
+---
+
+## 5b. `recenter_detail` (when `recenter_detail = TRUE` or `full_detail = TRUE`)
+
+The recentered CSD z-scores that the child algorithm cleans on, exposed as a **stable, supported output contract** so downstream tools (e.g. quality-measure code that reads the recentered z) can depend on them without relying on the diagnostic `debug` bundle. These three columns are a subset of what `debug` also surfaces (§7a); the difference is that this switch is a maintained interface, not diagnostic. Child rows only — adult rows are `NA` for all three.
+
+| Column | Type | Values |
+|---|---|---|
+| `tbc.sd` | numeric | Recentered uncorrected z: `sd.orig` minus `rcmedian.sd`. Primary z-score for most cleaning steps. |
+| `ctbc.sd` | numeric | Recentered GA-corrected z: `sd.corr` minus `rcmedian.sd`. Equals `tbc.sd` whenever `sd.corr == sd.orig` (non-`potcorr` and reverted `potcorr` subjects). |
+| `rcmedian.sd` | numeric | The per-row recentering median subtracted to form `tbc.sd`/`ctbc.sd`, looked up by `(param, sex, agedays)` from the recentering source in effect (`recenter_source`). |
+
+---
+
+## 6. `display_gc_id` (when `display_gc_id = TRUE` or `full_detail = TRUE`)
+
+| Column | Type | Values |
+|---|---|---|
+| `gc_id` | integer or as supplied | The id growthcleanr actually used internally: equal to the user's `id` when it was valid (no regen needed), or the auto-generated sequential `1:N` (in input row order) when the user's `id` was absent / `NULL` / `NA` / non-unique and gc had to regenerate. Companion to the standard `id` column (§1): `id` preserves whatever the user supplied (even if invalid), `gc_id` exposes the key gc used. Recommended whenever the input `id` may not be a clean unique per-row identifier — and required as the row key in partial-run mode + regen (see the `id` note in §1). |
+
+---
+
+## 7. `debug` (when `debug = TRUE` or `full_detail = TRUE`)
+
+Intermediate diagnostic columns retained for threshold refinement and development; not intended for routine use. The z-score columns (§7a–7b) are child-only — adult rows are `NA` for them — but `gc_sex` (§7c) applies to all rows. The set may grow over time as additional trajectory steps gain debug instrumentation; the columns below are the current set that survives the trim.
+
+### 7a. CSD z-scores
+
+| Column | Type | Description |
+|---|---|---|
+| `sd.orig` | numeric | Raw CSD z-score from the WHO/CDC age-blend, computed once at preprocessing. Not modified by Child Step 2b — GA correction lives in `sd.corr`. |
+| `sd.corr` | numeric | GA-corrected raw CSD z-score (Child Step 2b). For non-`potcorr` subjects, equals `sd.orig`. For `potcorr` subjects, initially set to a Fenton-CSD-corrected z via `.compute_corrected_z()`; then **reverted to `sd.orig`** for the subset whose correction is not corroborated (neither a consistent early-weight trajectory nor a low same-day height) — so not every `potcorr` subject ends with a correction. |
+| `tbc.sd` | numeric | Recentered uncorrected z: `sd.orig` minus the population-median recentering offset. Primary z-score for most cleaning steps. |
+| `ctbc.sd` | numeric | Recentered GA-corrected z: `sd.corr` minus the same recentering offset. Equal to `tbc.sd` whenever `sd.corr == sd.orig` (non-`potcorr` subjects and reverted `potcorr` subjects). |
+
+### 7b. Plus/minus perturbation z-scores
+
+Recentered z-scores recomputed under a ±5%-of-weight (WT) or ±1 cm (HT/HC) perturbation, used by some trajectory steps to test sensitivity at recorded precision.
+
+| Column | Type | Description |
+|---|---|---|
+| `tbc.p_plus` | numeric | Recentered uncorrected z under the `+` perturbation. |
+| `tbc.p_minus` | numeric | Recentered uncorrected z under the `−` perturbation. |
+| `ctbc.p_plus` | numeric | Recentered GA-corrected z under the `+` perturbation. Equal to `tbc.p_plus` for uncorrected values. |
+| `ctbc.p_minus` | numeric | Recentered GA-corrected z under the `−` perturbation. Equal to `tbc.p_minus` for uncorrected values. |
+
+### 7c. `gc_sex` — gc's interpreted sex
+
+| Column | Type | Description |
+|---|---|---|
+| `gc_sex` | integer | The sex value gc actually used internally: `0` (male), `1` (female), or `NA` (uninterpretable). Companion to the standard `sex` column (§1), which carries the user's **verbatim** submission: `sex` preserves what was submitted, `gc_sex` exposes the coerced value the algorithm ran on. Present under `debug` / `full_detail`. (Adult and child alike — the coercion is shared.) |
+
+---
+
+## Quick map: option → columns added
+
+| Option (default) | Columns added | Notes |
+|---|---|---|
+| (always) | `id`, `subjid`, `param`, `agedays`, `sex`, `measurement`, `exclude`, `bin_exclude` | 8 columns. `exclude` carries the Summary code. |
+| `unit_error_range = TRUE` *(default)* | `unit_error_range` | Set `FALSE` to omit. Not part of `full_detail`. |
+| `exclude_detail = TRUE` | `exclude_detailed` | Step-level Detailed code. |
+| `tri_exclude = TRUE` | `tri_exclude` | |
+| `cf_detail = TRUE` | `cf_status`, `cf_deltaz`, `cf_nextz`, `imperial`, `cf_dage_orig`, `cf_dage_next` | |
+| `corr_detail = TRUE` | `corr_val`, `corr_pt` | |
+| `recenter_detail = TRUE` | `tbc.sd`, `ctbc.sd`, `rcmedian.sd` | Child rows only (`NA` on adult). Stable output contract (subset of the debug z-scores). |
+| `display_gc_id = TRUE` | `gc_id` | |
+| `debug = TRUE` | `gc_sex` + `sd.orig`, `sd.corr`, `tbc.sd`, `ctbc.sd`, `tbc.p_plus`, `tbc.p_minus`, `ctbc.p_plus`, `ctbc.p_minus` | z-score columns are child rows only (`NA` on adult); `gc_sex` applies to all rows. Set may grow. |
+| `full_detail = TRUE` | `exclude_detailed` + `tri_exclude` + `cf_status`, `cf_deltaz`, `cf_nextz`, `imperial`, `cf_dage_orig`, `cf_dage_next` + `corr_val`, `corr_pt` + `tbc.sd`, `ctbc.sd`, `rcmedian.sd` + `gc_id` + the debug set (incl. `gc_sex`) | Convenience switch for `exclude_detail` + `cf_detail` + `corr_detail` + `recenter_detail` + `debug` + `tri_exclude` + `display_gc_id`. Does **not** affect `unit_error_range` (independent default-on). |

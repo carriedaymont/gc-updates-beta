@@ -1,0 +1,88 @@
+url: https://carriedaymont.github.io/gc-updates-beta
+
+navbar:
+  structure:
+    left: [home, articles, reference, news]
+    right: [github]
+
+articles:
+  - title: Get started
+    desc: What growthcleanr does and how to run it. Start here.
+    contents:
+      - start-here-updates-beta
+      - ai-role
+  - title: Configuration & output
+    desc: Interpreting and customizing results — no programming required.
+    contents:
+      - exclusion-codes
+      - output
+  - title: Technical reference
+    desc: >
+      How growthcleanr works inside, for understanding or modifying it. The
+      algorithm vignettes assume no special programming background; the pipeline
+      and testing vignettes assume no growth-domain background. Use whichever
+      matches what you're changing.
+    contents:
+      - child-algorithm
+      - cf-rescue
+      - adult-algorithm
+      - methods
+      - recentering
+      - wrapper
+      - configuration
+      - utilities
+      - testing
+
+reference:
+  - title: "Cleaning height and weight observations"
+    desc: Functions for cleaning growth data
+  - contents:
+      - cleangrowth
+      - cleangrowth_checkpoint
+      - cleangrowth_checkpoint_combine
+      - gc_preload_refs
+      - ewma
+      - read_anthro
+      - sd_median
+      - permissiveness_presets
+  - title: "Extended measures for pediatric BMI"
+    desc: >
+      Compute Z-scores and percentiles for pediatric subjects, based on CDC SAS
+      program at
+      https://www.cdc.gov/nccdphp/dnpao/growthcharts/resources/sas.htm
+  - contents:
+      - ext_bmiz
+  - title: "Utilities"
+    desc: Support functions for common data cleaning workflows
+  - contents:
+      - longwide
+      - recode_sex
+      - simple_bmi
+      - splitinput
+  - title: "Datasets"
+    desc: Reference data and additional sources
+  - contents:
+      - CDCref_d
+      - syngrowth
+      - tanner_ht_vel
+      - tanner_ht_vel_with_2sd
+      - test_syngrowth_sas_output_compare
+      - test_syngrowth_wide
+      - who_ht_maxvel
+      - who_ht_maxvel_2sd
+      - who_ht_vel_2sd
+      - who_ht_vel_3sd
+      - fent_foraga
+      - fenton2025_ms_lookup_smoothed
+      - growth_cdc_ext_infants
+      - growth_who_ext
+      - rc-reference-medians
+      - tanner_ht_vel_rev
+      - who_hc_maxvel
+      - who_hc_vel_3sd
+
+repo:
+  url:
+    home: https://github.com/carriedaymont/gc-updates-beta
+    source: https://github.com/carriedaymont/gc-updates-beta/blob/main/
+    issue: https://github.com/carriedaymont/gc-updates-beta/issues/

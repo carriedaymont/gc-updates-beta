@@ -1,0 +1,97 @@
+---
+title: "Exclusion codes"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Exclusion codes}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\usepackage[utf8]{inputenc}
+---
+
+
+
+
+**Purpose.** This file is the canonical catalog of every value `cleangrowth()` can place in the `exclude` (Summary) and `exclude_detailed` (Detailed) output columns.
+
+**Code truth.** The authoritative enumeration in code is in `R/child_clean.R`: the two crosswalk vectors `exclude.map.summary` / `exclude.map.detailed` and the factor-level vectors `exclude.levels.summary` / `exclude.levels.detailed`. The algorithm continues to emit its original internal step literals (`exclude.levels.peds` + `exclude.levels.adult`); a mapping layer at the end of output assembly translates those internal codes into the Summary and Detailed codes below. Any Summary/Detailed code that is not a level in the corresponding `exclude.levels.*` vector becomes a silent `NA` in the factor output, so this catalog and those vectors must stay identical.
+
+**Consolidation rationale.** Many internal codes were separated largely for debugging and carry little information for most users (RV/firstRV/allRV passes, `-All` variants, round iterations, the child-vs-adult algorithm split). The Summary level consolidates these. Most users want an overall summary of why values were excluded; stratifying by age is easy for them, re-consolidating codes is not.
+
+---
+
+## Output levels
+
+growthcleanr reports each value at one of multiple verbosity **levels**:
+
+- **Summary** (default) — the value in the `exclude` column. Consolidated across steps *and* across the child/adult algorithms; the smallest useful reason set for the typical user. 14 codes.
+- **Detailed** (opt-in via `exclude_detail = TRUE` or `full_detail = TRUE`) — adds an `exclude_detailed` column. Step-level; keeps the child (`-C-`) / adult (`-A-`) algorithm prefix; **folds away** the repeated-value (RV / firstRV / allRV), `-All`, and round-iteration distinctions. Every Detailed code maps to exactly one Summary code.
+- **Internal** — the per-step literals the algorithm emits today (including RV passes, `-All` variants, round iteration).
+
+**Surfacing.** Follows the existing `cf_detail` / `corr_detail` / `full_detail` convention: `exclude` always carries Summary; `exclude_detailed` is added only when requested, so both views are available without re-running.
+
+**Summary factor order** (as set in `exclude.levels.summary`): `Include`, then shared codes, then exclusions in approximate algorithm-step order — `Include` → `Exclude-Not-GC-Param`, `Exclude-Missing-Info`, `Exclude-HC-Out-of-Range`, `Exclude-Identical`, `Exclude-Extraneous` → `Exclude-Hard-Limit`, `Exclude-CF`, `Exclude-Scale-Max`, `Exclude-Extreme`, `Exclude-Pattern`, `Exclude-Pair`, `Exclude-Single`, `Exclude-Traj-Uneval`.
+
+---
+
+## Shared / "for all" codes (level-independent — identical at every level)
+
+These do not vary by level and carry no `-C-`/`-A-` prefix.
+
+| Code | Algorithm | Step | When |
+|---|---|---|---|
+| `Include` | both | — | Value passes all checks (binary `bin_exclude` = `Include`). |
+| `Exclude-Not-GC-Param` | both | preprocessing | `param` is present but not one gc handles. **New behavior** — the row is set aside at entry with its measurement preserved and rebound at the end (see Implementation notes). |
+| `Exclude-Missing-Info` | both | preprocessing | Missing or unevaluable required field: `NA`/`NaN` measurement, **`measurement < 0`** (new), `measurement == 0`, `agedays < 0`, NA `agedays` after the child/adult split, missing `param`, or unusable `sex`. |
+| `Exclude-HC-Out-of-Range` | child | preprocessing | HC with `agedays > 5 × 365.25` (WHO HC z-score reference ends at 5 y). |
+| `Exclude-Identical` | both | child 13 / adult 9H, 10W | Identical to the included value for the same SPA (same-day duplicate, kept-one loser). |
+| `Exclude-Extraneous` | both | child 13 / adult 9H, 10W | Non-selected, non-identical same-day extraneous value. |
+
+Renames from prior internal code: `Exclude-Missing` → `Exclude-Missing-Info`; `Exclude-Not-Cleaned` → `Exclude-HC-Out-of-Range`.
+
+**Temporary (never returned):** `Exclude-C-Temp-Same-Day` is an internal child Step 5 flag and must be resolved before output at every level (it maps to `Exclude-Extraneous` if it ever reached output).
+
+---
+
+## Child crosswalk (Detailed → Summary)
+
+Detailed child codes keep the `-C-` prefix. Not param-specific (the `param` column carries the parameter).
+
+| Summary code | Child Step(s) | Detailed code(s) folded in | Reason |
+|---|---|---|---|
+| `Exclude-CF` | 6 | `Exclude-C-CF` | Deemed likely carried forward from the prior value. |
+| `Exclude-Hard-Limit` | 7 | `Exclude-C-Hard-Limit` | Population implausible value (outside population hard limits). Internal literal `Exclude-C-PIV`. |
+| `Exclude-Extreme` | 9, 11 | `Exclude-C-Evil-Twins` (9), `Exclude-C-Traj-Extreme` (11) | Extreme outlier: adjacent extreme value pair/group (Step 9), *or* extreme trajectory deviation / EWMA1 (Step 11). |
+| `Exclude-Pattern` | 15, 16, 17 | `Exclude-C-Traj` (15/16), `Exclude-C-Abs-Diff` (17) | Moderate trajectory outlier (EWMA2; middle, first, last, birth WT, birth HT/HC, all sub-variants) *or* height/HC velocity (abs-diff) violation. |
+| `Exclude-Pair` | 19 | `Exclude-C-Pair` | Subject with 2 included measurements at Step 19, one excluded. |
+| `Exclude-Single` | 19 | `Exclude-C-Single` | Subject with 1 included measurement at Step 19, excluded. |
+| `Exclude-Traj-Uneval` | 21 | `Exclude-C-Unevaluable-Trajectory` | Unevaluable trajectory: so many values meet error criteria the subject is deemed unevaluable. |
+
+(Shared `Exclude-Identical` / `Exclude-Extraneous` from child Step 13 are listed in the shared table above; the detailed level uses the same names, not `-C-`-prefixed.)
+
+---
+
+## Adult crosswalk (Detailed → Summary)
+
+Detailed adult codes keep the `-A-` prefix. Adult step suffix `H`/`W` indicates HT/WT scope. **Adult has no `Exclude-Pair`** — the adult 2-distinct-value pair/window checks are trajectory-disagreement and fold into `Exclude-Pattern` (this avoids colliding with the child "sparse 2-measurement subject" meaning of `Exclude-Pair`).
+
+| Summary code | Adult Step(s) | Detailed code(s) folded in | Reason |
+|---|---|---|---|
+| `Exclude-Hard-Limit` | 1H/1W | `Exclude-A-Hard-Limit` | Population implausible value (outside population hard limits). Internal literal `Exclude-A-PIV`. |
+| `Exclude-Scale-Max` | 4W | `Exclude-A-Scale-Max` (+ internal `Scale-Max-Identical`, `Scale-Max-RV-Propagated`) | Weight at the designated scale maximum (all scale-max variants fold here). |
+| `Exclude-Extreme` | 9Wa, 9Wb | `Exclude-A-Evil-Twins` (9Wa), `Exclude-A-Traj-Extreme` (9Wb) | Extreme outlier: adjacent extreme weight pair (9Wa) or extreme EWMA weight outlier (9Wb). |
+| `Exclude-Pattern` | 10Ha, 10Hb, 11Wa, 11Wa2, 11Wb | `Exclude-A-Ord-Pair` (10Ha), `Exclude-A-Window` (10Hb), `Exclude-A-2D-Ordered` (11Wa), `Exclude-A-2D-Non-Ordered` (11Wa2), `Exclude-A-Traj-Moderate` + `Exclude-A-Traj-Moderate-Error-Load` (11Wb) | Trajectory/pattern disagreement: 2-distinct HT pair outside band, 3+-distinct HT window, 2D ordered/non-ordered WT pair, or moderate EWMA WT outlier (incl. error-load escalation). |
+| `Exclude-Single` | 13 | `Exclude-A-Single` | Subject with 1 measurement at Step 13, excluded. |
+| `Exclude-Traj-Uneval` | 14 | `Exclude-A-Unevaluable-Trajectory` | Unevaluable trajectory: error ratio exceeds threshold. |
+
+**Detailed level retains** `Exclude-A-Traj-Moderate-Error-Load` as a distinct code (the `-Error-Load` escalation inside 11Wb); the `-RV` copy folds into it. All other RV/firstRV/allRV/`-All`/`-RV-Propagated` passes fold into their base Detailed code.
+
+**Internal-level codes that fold up:** adult firstRV / allRV / `-RV-Propagated` passes of the Traj-Extreme and Traj-Moderate families, `-All` variants (`Ord-Pair-All`, `Window-All`), the within-trajectory `-Error-Load-RV` escalation (→ `Exclude-Pattern`), and `Exclude-A-Scale-Max-RV-Propagated` (→ `Exclude-Scale-Max`).
+
+---
+
+## Notes on current behavior
+
+- **`Exclude-Not-GC-Param`.** Rows whose `param` is not one growthcleanr cleans are set aside at entry with their **original measurement preserved**, given the internal code `Exclude-Not-GC-Param`, and rebound at output (rather than being converted to a missing value).
+- **`measurement < 0` → `Exclude-Missing-Info`**, alongside `measurement == 0` and `NA`/`NaN` (both child and adult paths). `sex = NA` resolves to `Exclude-Missing-Info` as well (via a missing z-score in preprocessing).
+- **Population implausible value.** Output codes are Summary `Exclude-Hard-Limit` and Detailed `Exclude-C-Hard-Limit` / `Exclude-A-Hard-Limit`. The **internal step literals remain `Exclude-C-PIV` / `Exclude-A-PIV`** (PIV = population implausible value, formerly `BIV`, "biologically implausible"); the output-mapping layer renames them to `Hard-Limit`. The name reflects that implausibility here is judged **solely against population reference limits** — which, especially at tighter adult permissiveness levels, can exclude biologically plausible values — not against the patient's own trajectory. (`Exclude-Single` is also population-limit-based, but uses different limits/methods than the PIV step.)
+- **Adult Scale-Max:** all scale-max variants (`Exclude-A-Scale-Max`, `Exclude-A-Scale-Max-Identical`, `Exclude-A-Scale-Max-RV-Propagated`) fold to `Exclude-Scale-Max`.
