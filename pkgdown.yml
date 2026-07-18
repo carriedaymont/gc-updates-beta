@@ -1,0 +1,21 @@
+pandoc: 3.8.3
+pkgdown: 2.2.1
+pkgdown_sha: ~
+articles:
+  adult-algorithm: adult-algorithm.html
+  ai-role: ai-role.html
+  cf-rescue: cf-rescue.html
+  child-algorithm: child-algorithm.html
+  configuration: configuration.html
+  exclusion-codes: exclusion-codes.html
+  methods: methods.html
+  output: output.html
+  recentering: recentering.html
+  start-here-updates-beta: start-here-updates-beta.html
+  testing: testing.html
+  utilities: utilities.html
+  wrapper: wrapper.html
+last_built: 2026-07-18T01:27Z
+urls:
+  reference: https://carriedaymont.github.io/gc-updates-beta/reference
+  article: https://carriedaymont.github.io/gc-updates-beta/articles
