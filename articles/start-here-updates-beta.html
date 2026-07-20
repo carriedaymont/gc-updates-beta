@@ -70,7 +70,7 @@
     <div class="page-header toc-ignore">
       <h1 data-toc-skip>Start here: growthcleanr updates (beta)</h1>
             
-            <h4 data-toc-skip class="date">2026-07-18</h4>
+            <h4 data-toc-skip class="date">2026-07-20</h4>
       
       <small class="dont-index">Source: <a href="https://github.com/carriedaymont/gc-updates-beta/blob/main/vignettes/start-here-updates-beta.Rmd" class="external-link"><code>vignettes/start-here-updates-beta.Rmd</code></a></small>
       <div class="hidden name"><code>start-here-updates-beta.Rmd</code></div>
@@ -298,11 +298,12 @@ measurements as opposed to being carried forward. Setting thresholds for
 rescue is extremely challenging because the performance of different
 thresholds varies widely based on site-specific practices, so these
 methods may continue to evolve.</li>
-<li>
-<strong>Improved default recentering.</strong> The built-in
-recentering medians (the smoothed median z-scores growthcleanr subtracts
-before most comparisons) were re-derived and resmoothed. You can supply
-your own recentering medians with <code>sd.recenter =</code>, or turn
+<li>Improved recentering. Rather than deriving recentering medians from
+your data (or from NHANES data for smaller datasets), this version of
+growthcleanr uses built-in smoothed recentering medians from
+multi-center data which provide protection from areas of low visit
+density affecting recentering and therefore results. You can supply your
+own recentering medians with <code>sd.recenter =</code>, or turn
 recentering off with <code>recenter_source = "none"</code>. See
 <code><a href="../articles/recentering.html">vignette("recentering")</a></code> for how the defaults were built and
 how to customize.</li>
