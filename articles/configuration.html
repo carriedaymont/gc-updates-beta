@@ -70,7 +70,7 @@
     <div class="page-header toc-ignore">
       <h1 data-toc-skip>Configuration: parameters and thresholds</h1>
             
-            <h4 data-toc-skip class="date">2026-07-20</h4>
+            <h4 data-toc-skip class="date">2026-07-21</h4>
       
       <small class="dont-index">Source: <a href="https://github.com/carriedaymont/gc-updates-beta/blob/main/vignettes/configuration.Rmd" class="external-link"><code>vignettes/configuration.Rmd</code></a></small>
       <div class="hidden name"><code>configuration.Rmd</code></div>
@@ -978,18 +978,26 @@ exactly one measurement</td>
 <tr class="even">
 <td>
 <code>imperial</code> WEIGHTKG</td>
-<td><code>abs((v.orig * 2.20462262) %% 1) &lt; 0.01</code></td>
+<td>
+<code>abs(x - round(x)) &lt; 0.01</code> where
+<code>x = v.orig * 2.20462262</code>
+</td>
 <td>
 <code>cleanchild</code> Child Step 6 (<code>cf_detail</code>)</td>
-<td>Whole pounds detection (design-aid column)</td>
+<td>Whole pounds detection, within 0.01 lb in either direction
+(design-aid column)</td>
 </tr>
 <tr class="odd">
 <td>
 <code>imperial</code> HEIGHTCM / HEADCM</td>
-<td><code>abs((v.orig / 2.54) %% 0.5) &lt; 0.01</code></td>
+<td>
+<code>abs(x - round(x / 0.5) * 0.5) &lt; 0.01</code> where
+<code>x = v.orig / 2.54</code>
+</td>
 <td>
 <code>cleanchild</code> Child Step 6 (<code>cf_detail</code>)</td>
-<td>Whole or half inches detection (design-aid column)</td>
+<td>Whole or half inches detection, within 0.01 in in either direction
+(design-aid column)</td>
 </tr>
 <tr class="even">
 <td>Standard rescue (with next value)</td>
