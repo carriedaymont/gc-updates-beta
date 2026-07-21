@@ -1594,7 +1594,7 @@ cleangrowth <- function(data = NULL,
     # steps; the velocity check (Child Step 17) applies only mindiff = -1.5 with
     # no upper bound for these ages, since the WHO HC velocity reference ends at
     # 24 months.
-    data.all[param == "HEADCM" & agedays > (5*365.25), exclude := "Exclude-Not-Cleaned"]
+    data.all[param == "HEADCM" & agedays >= (5*365.25), exclude := "Exclude-Not-Cleaned"]
 
     # Initialize cf_rescued column to track CF rescue status
     # Populated in Step 6; rescued CFs get set back to "Include" but this column
@@ -1700,7 +1700,7 @@ cleangrowth <- function(data = NULL,
     # (and thus tbc.sd) is NA past that point and the is.na(tbc.sd) safety check
     # just above would relabel those rows Exclude-Missing. This line re-asserts
     # Exclude-Not-Cleaned for all HC > 5y (the more informative code).
-    data.all[param == "HEADCM" & agedays > 5*365.25, exclude := 'Exclude-Not-Cleaned']
+    data.all[param == "HEADCM" & agedays >= 5*365.25, exclude := 'Exclude-Not-Cleaned']
 
     # pediatric: cleanchild (most of steps) ----
 
@@ -3917,10 +3917,24 @@ cleanchild <- function(data.df,
     # within 0.01 of the imperial unit. A design aid for CF-logic development;
     # computed from v.orig so it is populated for every row, including in
     # batches with no CFs.
+    # Distance-to-nearest-unit test (symmetric): an earlier version used
+    # abs(x %% u) < 0.01, but R's %% returns a value in [0, u), so it only
+    # flagged values just ABOVE a whole/half unit and silently missed values
+    # just BELOW one (e.g. 71.996 lb -> 71.996 %% 1 = 0.996). round(x/u)*u gives
+    # the nearest unit in both directions.
     data.df[, imperial := FALSE]
-    data.df[param == "WEIGHTKG", imperial := abs((v.orig * 2.20462262) %% 1) < 0.01]
-    data.df[param == "HEIGHTCM", imperial := abs((v.orig / 2.54) %% 0.5) < 0.01]
-    data.df[param == "HEADCM",   imperial := abs((v.orig / 2.54) %% 0.5) < 0.01]
+    data.df[param == "WEIGHTKG", imperial := {
+      x <- v.orig * 2.20462262
+      abs(x - round(x)) < 0.01
+    }]
+    data.df[param == "HEIGHTCM", imperial := {
+      x <- v.orig / 2.54
+      abs(x - round(x / 0.5) * 0.5) < 0.01
+    }]
+    data.df[param == "HEADCM", imperial := {
+      x <- v.orig / 2.54
+      abs(x - round(x / 0.5) * 0.5) < 0.01
+    }]
 
     # cf_dage_orig: days from a CF row's originator to the CF row
     # (agedays_CF - agedays_orig; always positive). Populated for positionally-

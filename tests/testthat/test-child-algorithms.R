@@ -534,11 +534,16 @@ test_that("CF rescue: cf_detail design-aid columns have expected presence, types
               info = "imperial should be logical")
   expect_false(any(is.na(res$imperial)),
                info = "imperial should be non-NA for every child row")
+  # Symmetric distance-to-nearest-unit test: within 0.01 of a whole/half
+  # imperial unit in EITHER direction (a bare %% 1 / %% 0.5 would only catch
+  # values just above a unit and miss those just below it).
   expected_imperial <- rep(FALSE, nrow(res))
   is_wt  <- res$param == "WEIGHTKG"
   is_htc <- res$param %in% c("HEIGHTCM", "HEADCM")
-  expected_imperial[is_wt]  <- abs((res$measurement[is_wt]  * 2.20462262) %% 1)   < 0.01
-  expected_imperial[is_htc] <- abs((res$measurement[is_htc] / 2.54)        %% 0.5) < 0.01
+  x_wt  <- res$measurement[is_wt]  * 2.20462262
+  x_htc <- res$measurement[is_htc] / 2.54
+  expected_imperial[is_wt]  <- abs(x_wt  - round(x_wt))            < 0.01
+  expected_imperial[is_htc] <- abs(x_htc - round(x_htc / 0.5) * 0.5) < 0.01
   expect_identical(res$imperial, expected_imperial,
                    info = "imperial must match the internal whole/half imperial-unit definition")
 

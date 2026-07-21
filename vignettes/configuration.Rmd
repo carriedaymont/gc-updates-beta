@@ -167,8 +167,8 @@ See Section 4 for preprocessing-level values that apply before dispatch.
 | Threshold | Value | Location | Role |
 |-----------|-------|----------|------|
 | CF detection | Exact equality on `v.orig`; prior unique ageday must have exactly one measurement | `cleanchild` Child Step 6 Phase 1 | Row is CF when `!is.na(prior_single_val) & v.orig == prior_single_val` |
-| `imperial` WEIGHTKG | `abs((v.orig * 2.20462262) %% 1) < 0.01` | `cleanchild` Child Step 6 (`cf_detail`) | Whole pounds detection (design-aid column) |
-| `imperial` HEIGHTCM / HEADCM | `abs((v.orig / 2.54) %% 0.5) < 0.01` | `cleanchild` Child Step 6 (`cf_detail`) | Whole or half inches detection (design-aid column) |
+| `imperial` WEIGHTKG | `abs(x - round(x)) < 0.01` where `x = v.orig * 2.20462262` | `cleanchild` Child Step 6 (`cf_detail`) | Whole pounds detection, within 0.01 lb in either direction (design-aid column) |
+| `imperial` HEIGHTCM / HEADCM | `abs(x - round(x / 0.5) * 0.5) < 0.01` where `x = v.orig / 2.54` | `cleanchild` Child Step 6 (`cf_detail`) | Whole or half inches detection, within 0.01 in in either direction (design-aid column) |
 | Standard rescue (with next value) | `cf_deltaz + cf_nextz <= 1` AND `cf_deltaz <= 1.5` | `cleanchild` Child Step 6 Phase 4 | Decided on each string's last CF, applied to the whole string |
 | Standard rescue (no next value) | `cf_deltaz <= 0.5` if `agedays < 13*365.25`, else `cf_deltaz <= 1` | `cleanchild` Child Step 6 Phase 4 | End-of-series age fallback |
 
